@@ -128,6 +128,10 @@ public class ArgAdmin implements PSCommandArg {
                 LegacyUpgrade.upgradeRegions();
                 s.sendMessage(ChatColor.YELLOW + "Done!");
                 break;
+            case "regen":
+                return ArgAdminRegen.argumentAdminRegen(s, args);
+            case "regenplayer":
+                return ArgAdminRegen.argumentAdminRegenPlayer(s, args);
             case "debug":
                 if (ProtectionStones.getInstance().isDebug()) {
                     s.sendMessage(ChatColor.YELLOW + "Debug mode is now off.");
