@@ -53,10 +53,54 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.block.DoubleChest;
+import org.bukkit.inventory.InventoryHolder;
 
 import java.util.List;
 
 public class ListenerClass implements Listener {
+
+    /**
+     * WorldGuard normally sees the player's right-click. Remote inventory plugins can skip that
+     * interaction and call Player#openInventory directly, which used to expose a protected block
+     * to any player. Validate the actual holder again at inventory-open time.
+     */
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onContainerOpen(InventoryOpenEvent event) {
+        if (!(event.getPlayer() instanceof Player player)) return;
+
+        InventoryHolder holder = event.getInventory().getHolder();
+        if (holder == null) return;
+
+        if (holder instanceof BlockState state) {
+            denyRemoteContainerOpen(player, state.getBlock(), event);
+            return;
+        }
+
+        // A double chest has no single BlockState holder. Check both halves because a claim
+        // boundary can pass between them and either protected half must stay closed.
+        if (holder instanceof DoubleChest chest) {
+            if (chest.getLeftSide() instanceof BlockState left) {
+                denyRemoteContainerOpen(player, left.getBlock(), event);
+            }
+            if (!event.isCancelled() && chest.getRightSide() instanceof BlockState right) {
+                denyRemoteContainerOpen(player, right.getBlock(), event);
+            }
+        }
+    }
+
+    private void denyRemoteContainerOpen(Player player, Block block, InventoryOpenEvent event) {
+        try {
+            if (!WorldGuardPlugin.inst().createProtectionQuery().testBlockInteract(player, block)) {
+                event.setCancelled(true);
+                player.sendMessage(ChatColor.RED + "You cannot access a container in this protected region.");
+            }
+        } catch (RuntimeException exception) {
+            // A failed protection lookup must never become an access bypass.
+            event.setCancelled(true);
+            ProtectionStones.getPluginLogger().warning("Denied container access because the WorldGuard check failed: " + exception.getMessage());
+        }
+    }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onPlayerJoin(PlayerJoinEvent e) {
